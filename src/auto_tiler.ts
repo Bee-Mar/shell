@@ -47,12 +47,16 @@ export class AutoTiler {
         }
     }
 
-    update_toplevel(ext: Ext, fork: Fork, monitor: number) {
+    update_toplevel(ext: Ext, fork: Fork, monitor: number, gap_enabled: boolean = true) {
+        global.log(`updating top level`);
         let rect = ext.monitor_work_area(monitor);
-        rect.x += ext.gap_outer;
-        rect.y += ext.gap_outer;
-        rect.width -= ext.gap_outer * 2;
-        rect.height -= ext.gap_outer * 2;
+
+        if (gap_enabled) {
+            rect.x += ext.gap_outer;
+            rect.y += ext.gap_outer;
+            rect.width -= ext.gap_outer * 2;
+            rect.height -= ext.gap_outer * 2;
+        }
 
         let ratio;
 
@@ -71,10 +75,13 @@ export class AutoTiler {
     /** Attaches `win` to an optionally-given monitor */
     attach_to_monitor(ext: Ext, win: ShellWindow, workspace_id: [number, number]) {
         let rect = ext.monitor_work_area(workspace_id[0]);
-        rect.x += ext.gap_outer;
-        rect.y += ext.gap_outer;
-        rect.width -= ext.gap_outer * 2;
-        rect.height -= ext.gap_outer * 2;
+
+        if (!ext.settings.smart_gaps()) {
+            rect.x += ext.gap_outer;
+            rect.y += ext.gap_outer;
+            rect.width -= ext.gap_outer * 2;
+            rect.height -= ext.gap_outer * 2;
+        }
 
         const [entity, fork] = this.forest.create_toplevel(win.entity, rect.clone(), workspace_id)
         this.attached.insert(win.entity, entity);
