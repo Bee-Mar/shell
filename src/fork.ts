@@ -7,9 +7,11 @@ import type { Ext } from 'extension';
 import type { Rectangle } from 'rectangle';
 import type { Node } from 'node';
 
+import * as Ecs from 'ecs';
 import * as Lib from 'lib';
 import * as node from 'node';
 import * as Rect from 'rectangle';
+import { ShellWindow } from './window';
 
 const XPOS = 0;
 const YPOS = 1;
@@ -78,6 +80,32 @@ export class Fork {
         return this.is_horizontal() ? this.area.height : this.area.width;
     }
 
+    find_branch(entity: Entity): Node | null {
+        const locate = (branch: Node): Node | null => {
+            switch (branch.inner.kind) {
+                case 2:
+                    if (Ecs.entity_eq(branch.inner.entity, entity)) {
+                        return branch;
+                    }
+
+                    break
+                case 3:
+                    for (const e of branch.inner.entities) {
+                        if (Ecs.entity_eq(e, entity)) {
+                            return branch;
+                        }
+                    }
+            }
+
+            return null;
+        }
+
+        const node = locate(this.left);
+        if (node) return node;
+
+        return this.right ? locate(this.right) : null;
+    }
+
     /** If this fork has a horizontal orientation */
     is_horizontal(): boolean {
         return Lib.Orientation.HORIZONTAL == this.orientation;
@@ -88,13 +116,36 @@ export class Fork {
     }
 
     /** Replaces the association of a window in a fork with another */
-    replace_window(a: Entity, b: Entity): boolean {
-        if (this.left.is_window(a)) {
-            this.left.entity = b;
-        } else if (this.right) {
-            this.right.entity = b;
-        } else {
-            return false;
+    replace_window(ext: Ext, a: ShellWindow, b: ShellWindow): boolean {
+        if (!this.right) return false;
+
+        switch (this.left.inner.kind) {
+            case 2:
+                if (Ecs.entity_eq(this.left.inner.entity, a.entity)) {
+                    this.left.inner.entity = b.entity;
+                } else if (this.right.inner.kind === 2) {
+                    this.right.inner.entity = b.entity;
+                } else if (this.right.inner.kind === 3) {
+                    const idx = node.stack_find(this.right.inner, a.entity);
+                    if (idx === null) return false;
+                    node.stack_replace(ext, this.right.inner, idx, b.entity);
+                    this.right.inner.entities[idx] = b.entity;
+                }
+
+                break
+            case 3:
+                let idx = node.stack_find(this.left.inner, a.entity);
+                if (idx !== null) {
+                    node.stack_replace(ext, this.left.inner, idx, b.entity);
+                    this.left.inner.entities[idx] = b.entity;
+                } else if (this.right.inner.kind === 2) {
+                    this.right.inner.entity = b.entity;
+                } else if (this.right.inner.kind === 3) {
+                    const idx = node.stack_find(this.right.inner, a.entity);
+                    if (idx === null) return false;
+                    node.stack_replace(ext, this.right.inner, idx, b.entity);
+                    this.right.inner.entities[idx] = b.entity;
+                }
         }
 
         return true;
@@ -104,12 +155,6 @@ export class Fork {
     set_area(area: Rectangle): Rectangle {
         this.area = area;
         return this.area;
-    }
-
-    /** Sets the orientation of this fork */
-    set_orientation(orientation: Lib.Orientation): Fork {
-        this.orientation = orientation;
-        return this;
     }
 
     /** Sets the ratio of this fork
@@ -194,7 +239,7 @@ export class Fork {
             if (this.workspace !== workspace) {
                 this.workspace = workspace;
                 for (const child_node of forest.iter(this.entity, node.NodeKind.FORK)) {
-                    let child = forest.forks.get(child_node.entity);
+                    let child = forest.forks.get((child_node.inner as node.NodeFork).entity);
                     if (child) child.workspace = workspace;
                 }
             }
